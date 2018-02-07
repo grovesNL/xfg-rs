@@ -9,6 +9,8 @@
 
 pub use self::build::{GraphBuildError, GraphBuilder};
 
+use std::ops::Range;
+
 use gfx_hal::{Backend, Device};
 use gfx_hal::command::{OneShot, Viewport};
 use gfx_hal::pool::CommandPool;
@@ -41,7 +43,7 @@ pub struct Graph<B: Backend, I, T> {
     images: Vec<I>,
     views: Vec<B::ImageView>,
     frames: usize,
-    first_draws_to_surface: usize,
+    draws_to_surface: Range<usize>,
 }
 
 impl<B, I, T> Graph<B, I, T>
@@ -49,7 +51,7 @@ where
     B: Backend,
 {
     /// Start building the render graph
-    pub fn build<'a>() -> GraphBuilder<'a, B, T> {
+    pub fn build<'a>() -> GraphBuilder<B, T> {
         GraphBuilder::new()
     }
 
@@ -99,7 +101,7 @@ where
 
         let ref signals = self.signals;
         let count = self.passes.len();
-        let first_draws_to_surface = self.first_draws_to_surface;
+        let ref draws_to_surface = self.draws_to_surface;
 
         // Record commands for all passes
         self.passes.iter_mut().enumerate().for_each(|(id, pass)| {
@@ -116,7 +118,7 @@ where
 
             {
                 // If it renders to acquired image
-                let wait_surface = if id == first_draws_to_surface {
+                let wait_surface = if id == draws_to_surface.start {
                     // And it should wait for acquisition
                     Some((acquire, PipelineStage::TOP_OF_PIPE))
                 } else {
@@ -131,12 +133,12 @@ where
                     .collect::<SmallVec<[_; 3]>>();
 
                 let mut to_signal = SmallVec::<[_; 1]>::new();
-                if id == count - 1 {
-                    // TODO: Find the last one that draws on to surface.
+                if id == draws_to_surface.end {
                     to_signal.push(release);
-                } else if let Some(signal) = signals[id].as_ref() {
+                }
+                if let Some(signal) = signals[id].as_ref() {
                     to_signal.push(signal);
-                };
+                }
 
                 // Signal the finish fence in last submission
                 let fence = if id == count - 1 { Some(finish) } else { None };

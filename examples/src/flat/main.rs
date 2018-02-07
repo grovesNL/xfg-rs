@@ -47,6 +47,9 @@ where
         "DrawFlat"
     }
 
+    /// Sampled attachments
+    fn sampled(&self) -> usize { 0 }
+
     /// Input attachments
     fn inputs(&self) -> usize { 0 }
 
@@ -370,20 +373,20 @@ where
     }
 }
 
-fn graph<'a, B>(surface_format: Format, colors: &'a mut Vec<ColorAttachment>, depths: &'a mut Vec<DepthStencilAttachment>) -> GraphBuilder<'a, B, Scene<B>>
+fn graph<'a, B>(surface_format: Format, graph: &mut GraphBuilder<B, Scene<B>>)
 where
     B: Backend,
 {
-    colors.push(ColorAttachment::new(surface_format).with_clear(ClearColor::Float([0.3, 0.4, 0.5, 1.0])));
-    depths.push(DepthStencilAttachment::new(Format::D32Float).with_clear(ClearDepthStencil(1.0, 0)));
+    let color = graph.add_attachment(ColorAttachment::new(surface_format).with_clear(ClearColor::Float([0.3, 0.4, 0.5, 1.0])));
+    let depth = graph.add_attachment(DepthStencilAttachment::new(Format::D32Float).with_clear(ClearDepthStencil(1.0, 0)));
 
     let pass = DrawFlat.build()
-        .with_color(colors.last().unwrap())
-        .with_depth_stencil(depths.last().unwrap());
+        .with_color(color)
+        .with_depth_stencil(depth);
 
-    GraphBuilder::new()
-        .with_pass(pass)
-        .with_present(colors.last().unwrap())
+    graph
+        .add_pass(pass)
+        .set_present(color);
 }
 
 fn fill<B>(scene: &mut Scene<B>, device: &B::Device)

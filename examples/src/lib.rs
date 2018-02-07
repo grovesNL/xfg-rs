@@ -96,7 +96,7 @@ pub fn run<T, Y>(_: T, _: Y) {
 #[deny(dead_code)]
 pub fn run<G, F, T>(graph: G, fill: F)
 where
-    G: for<'a> FnOnce(Format, &'a mut Vec<ColorAttachment>, &'a mut Vec<DepthStencilAttachment>) -> GraphBuilder<'a, back::Backend, Scene<back::Backend, T>>,
+    G: FnOnce(Format, &mut GraphBuilder<back::Backend, Scene<back::Backend, T>>),
     F: FnOnce(&mut Scene<back::Backend, T>, &<back::Backend as Backend>::Device),
 {
     env_logger::init();
@@ -186,12 +186,11 @@ where
     events_loop.poll_events(|_| ());
 
     let mut graph = {
-        let mut colors = Vec::new();
-        let mut depths = Vec::new();
-        graph(surface_format, &mut colors, &mut depths)
+        let mut builder = GraphBuilder::new();
+        graph(surface_format, &mut builder);
+        builder
             .with_extent(Extent { width: width as u32, height: height as u32, depth: 1 })
-            .with_backbuffer(&backbuffer)
-            .build(&device, |kind, level, format, usage, properties, device| {
+            .build(&device, &backbuffer, |kind, level, format, usage, properties, device| {
                 allocator.create_image(device, (Type::General, properties), kind, level, format, usage)
             }).unwrap()
     };

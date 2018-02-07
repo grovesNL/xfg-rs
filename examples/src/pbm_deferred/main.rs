@@ -698,7 +698,6 @@ where
     }
 }
 
-
 fn shift_for_alignment<T>(alignment: T, offset: T) -> T
 where
     T: From<u8> + Add<Output=T> + Sub<Output=T> + BitOr<Output=T> + PartialOrd,
@@ -708,4 +707,9 @@ where
     } else {
         offset
     }
+}
+
+#[test]
+fn shade_pass<'a>(inputs: [&'a ColorAttachment; 4], present: &'a ColorAttachment) -> PassBuilder<'a> {
+    
 }

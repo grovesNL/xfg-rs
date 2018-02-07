@@ -37,10 +37,10 @@ where
     /// Name of the pass
     fn name(&self) -> &str;
 
-    /// Input attachments desired format.
-    ///
-    /// Format of the actual attachment may be different, it may be larger if another consumer
-    /// expects a larger format, or smaller because of hardward limitations.
+    /// Sampled attachments count.
+    fn sampled(&self) -> usize;
+
+    /// Input attachments count.
     fn inputs(&self) -> usize;
 
     /// Number of colors to write
@@ -81,7 +81,7 @@ where
     fn bindings(&self) -> &[DescriptorSetLayoutBinding];
 
     /// Build render pass
-    fn build<'a>(self) -> PassBuilder<'static, B, T>
+    fn build<'a>(self) -> PassBuilder<B, T>
     where
         Self: Sized + 'static,
     {
