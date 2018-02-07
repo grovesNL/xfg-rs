@@ -108,6 +108,9 @@ pub(crate) struct AttachmentDesc {
 }
 
 impl AttachmentDesc {
+    fn is_first_write(&self, index: usize) -> bool {
+        self.write.clone().map_or(false, |w| w.start == index)
+    }
     fn is_last_write(&self, index: usize) -> bool {
         self.write.clone().map_or(false, |w| w.end == index)
     }
@@ -115,7 +118,7 @@ impl AttachmentDesc {
         self.read.clone().map_or(false, |r| r.end == index)
     }
     fn is_first_touch(&self, index: usize) -> bool {
-        self.write.clone().map_or(false, |w| w.start == index)
+        self.is_first_write(index)
     }
     fn is_last_touch(&self, index: usize) -> bool {
         self.is_last_read(index) || (self.is_last_write(index) && self.read.is_none())
@@ -133,8 +136,15 @@ impl AttachmentDesc {
         }
     }
 
-    pub(crate) fn store_op(&self, _index: usize) -> AttachmentStoreOp {
-        AttachmentStoreOp::Store
+    pub(crate) fn store_op(&self, index: usize) -> AttachmentStoreOp {
+        if self.is_last_touch(index) && !self.is_surface {
+            if self.is_last_write(index) && !self.format.aspect_flags().contains(AspectFlags::DEPTH) {
+                warn!("Pass at index {} writes to an attachment and nobody reads it", index);
+            }
+            AttachmentStoreOp::DontCare
+        } else {
+            AttachmentStoreOp::Store
+        }
     }
 
     pub(crate) fn image_layout_transition(&self, index: usize) -> Range<ImageLayout> {

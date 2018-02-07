@@ -11,21 +11,20 @@ extern crate winit;
 use std::sync::Arc;
 
 use cgmath::{Deg, PerspectiveFov, Matrix4, SquareMatrix};
-use gfx_hal::{Backend, Device, IndexType, Instance, PhysicalDevice, Surface};
-use gfx_hal::buffer::{IndexBufferView, Usage};
-use gfx_hal::command::{CommandBuffer, RenderPassInlineEncoder, Primary, Rect, Viewport};
-use gfx_hal::device::{Extent, ShaderError, WaitFor};
+use gfx_hal::{Backend, Device, Instance, PhysicalDevice, Surface};
+use gfx_hal::command::{Rect, Viewport};
+use gfx_hal::device::{Extent, WaitFor};
 use gfx_hal::format::{ChannelType, Format};
-use gfx_hal::memory::{cast_slice, Pod, Properties};
+use gfx_hal::memory::{Properties};
 use gfx_hal::pool::{CommandPool, CommandPoolCreateFlags};
 use gfx_hal::queue::Graphics;
 use gfx_hal::window::{FrameSync, Swapchain, SwapchainConfig};
 
-use gfx_mem::{Block, Factory, SmartAllocator, Type};
+use gfx_mem::{Factory, SmartAllocator, Type};
 
 use winit::{EventsLoop, WindowBuilder};
 
-use xfg::{ColorAttachment, DepthStencilAttachment, SuperFrame, GraphBuilder};
+use xfg::{SuperFrame, GraphBuilder};
 
 #[cfg(feature = "dx12")]
 pub extern crate gfx_backend_dx12 as back;

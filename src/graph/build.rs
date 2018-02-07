@@ -5,7 +5,7 @@ use std::ops::Range;
 
 use gfx_hal::{Backend, Device};
 use gfx_hal::device::{Extent, FramebufferError, ShaderError};
-use gfx_hal::format::{Format, Swizzle};
+use gfx_hal::format::{AspectFlags, Format, Swizzle};
 use gfx_hal::image::{AaMode, Kind, Level, SubresourceRange, Usage};
 use gfx_hal::memory::Properties;
 use gfx_hal::pso::{CreationError, PipelineStage};
@@ -315,8 +315,17 @@ where
         info!("Build pass nodes from pass builders");
         let mut pass_nodes: Vec<PassNode<B, T>> = Vec::new();
 
-        for ((pass_index, pass), last_dep) in passes.into_iter().enumerate().zip(deps) {
+        for (pass_index, pass) in passes.iter().enumerate() {
             info!("Check sampled inputs");
+            for &sampled in &pass.sampled {
+                let ref mut sampled = attachments[sampled.0];
+                debug_assert!(sampled.write.is_some());
+                debug_assert!(sampled.views.is_some());
+                debug_assert!(sampled.images.is_some());
+                sampled.read.get_or_insert_with(|| pass_index .. pass_index).end = pass_index;
+            }
+
+            info!("Check sampled targets");
             for &sampled in &pass.sampled {
                 let ref mut sampled = attachments[sampled.0];
                 debug_assert!(sampled.write.is_some());
@@ -348,14 +357,13 @@ where
                         &mut image_views,
                         self.extent,
                         frames,
-                        false,
                     ).map_err(GraphBuildError::AllocationError)?;
                     color.views = Some((image_views.len() - frames .. image_views.len()));
                     color.images = Some((images.len() - frames .. images.len()));
                 }
             }
 
-            info!("Collect depth-stencil target");
+            info!("Create depth-stencil target");
             if let Some(depth_stencil) = pass.depth_stencil {
                 let ref mut depth_stencil = attachments[depth_stencil.0];
                 depth_stencil.write.get_or_insert_with(|| pass_index .. pass_index).end = pass_index;
@@ -369,13 +377,14 @@ where
                         &mut image_views,
                         self.extent,
                         frames,
-                        false,
                     ).map_err(GraphBuildError::AllocationError)?;
                     depth_stencil.views = Some((image_views.len() - frames .. image_views.len()));
-                    depth_stencil.views = Some((images.len() - frames .. images.len()));
+                    depth_stencil.images = Some((images.len() - frames .. images.len()));
                 }
             }
+        }
 
+        for ((pass_index, pass), last_dep) in passes.into_iter().enumerate().zip(deps) {
             let mut node =
                 pass.build(device, self.extent, &attachments, &image_views, &images, pass_index)?;
 
@@ -481,20 +490,20 @@ fn create_target<B, A, I, E>(
     views: &mut Vec<B::ImageView>,
     extent: Extent,
     frames: usize,
-    depth: bool,
 ) -> Result<(), E>
 where
     B: Backend,
     A: FnMut(Kind, Level, Format, Usage, Properties, &B::Device) -> Result<I, E>,
     I: Borrow<B::Image>,
 {
+    debug!("Create target with format: {:#?}", format);
     let kind = Kind::D2(extent.width as u16, extent.height as u16, AaMode::Single);
     for _ in 0..frames {
         let image = allocator(
             kind,
             1,
             format,
-            if depth {
+            if format.aspect_flags().contains(AspectFlags::DEPTH) {
                 Usage::DEPTH_STENCIL_ATTACHMENT
             } else {
                 Usage::COLOR_ATTACHMENT

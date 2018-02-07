@@ -156,7 +156,7 @@ where
     where
         I: Borrow<B::Image>,
     {
-        info!("Build pass from {:?}", self);
+        debug!("Build pass from {:?}", self);
 
         // Check attachments setup
         assert_eq!(self.sampled.len(), self.pass.sampled());
@@ -234,7 +234,6 @@ where
                 preserves: &[],
             };
 
-            info!("Create randerpass");
             let renderpass = device.create_render_pass(
                 &inputs
                     .chain(colors)
@@ -250,12 +249,10 @@ where
 
         let descriptors = DescriptorPool::new(&self.pass.bindings(), device);
 
-        info!("Create pipeline layout");
         let pipeline_layout = device.create_pipeline_layout(Some(descriptors.layout()), &[]);
         debug!("Pipeline layout: {:?}", pipeline_layout);
 
         let mut shaders = SmallVec::new();
-        info!("Create graphics pipeline");
         let graphics_pipeline = {
             // Init basic configuration
             let mut pipeline_desc = pso::GraphicsPipelineDesc::new(
@@ -325,7 +322,7 @@ where
             if self.inputs.len() == 0 && self.colors.len() == 1 && attachments[self.colors[0].0].views == Some(0..0) {
                 SuperFramebuffer::External
             } else {
-                info!("Create framebuffers from:\ninputs: {:#?}\ncolors: {:#?}\ndepth-stencil: {:#?}", self.inputs, self.colors, self.depth_stencil);
+                debug!("Create framebuffers from:\ninputs: {:#?}\ncolors: {:#?}\ndepth-stencil: {:#?}", self.inputs, self.colors, self.depth_stencil);
                 let mut frames = None;
 
                 for indices in self.inputs.iter().chain(self.colors.iter()).chain(self.depth_stencil.as_ref()).map(|a| attachments[a.0].views.clone()) {
@@ -356,7 +353,7 @@ where
 
         let inputs = {
             let mut frames = None;
-            info!("Collect inputs:\nsampeld: {:#?}\nattchment: {:#?}", self.sampled, self.inputs);
+            debug!("Collect inputs:\nsampeld: {:#?}\nattchment: {:#?}", self.sampled, self.inputs);
             for indices in self.sampled.into_iter().chain(self.inputs).map(|a| attachments[a.0].images.clone()) {
                 let indices = indices.ok_or(GraphBuildError::InvalidConfiguaration)?;
                 let frames = frames.get_or_insert_with(|| vec![vec![]; indices.len()]);

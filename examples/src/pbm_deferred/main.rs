@@ -58,6 +58,9 @@ where
         "DrawPbmPrepare"
     }
 
+    /// Sampled attachments
+    fn sampled(&self) -> usize { 0 }
+
     /// Input attachments
     fn inputs(&self) -> usize { 0 }
 
@@ -270,6 +273,9 @@ where
     fn name(&self) -> &str {
         "DrawPbmShade"
     }
+
+    /// Sampled attachments
+    fn sampled(&self) -> usize { 4 }
 
     /// Input attachments
     fn inputs(&self) -> usize { 0 }
@@ -538,38 +544,35 @@ where
     }
 }
 
-fn graph<'a, B>(surface_format: Format, colors: &'a mut Vec<ColorAttachment>, depths: &'a mut Vec<DepthStencilAttachment>) -> GraphBuilder<'a, B, Scene<B, ObjectData>>
+fn graph<'a, B>(surface_format: Format, graph: &mut GraphBuilder<B, Scene<B, ObjectData>>)
 where
     B: Backend,
 {
-    colors.clear();
-    depths.clear();
-
-    colors.push(ColorAttachment::new(Format::Rgba32Float).with_clear(ClearColor::Float([0.0, 0.0, 0.0, 0.0])));
-    colors.push(ColorAttachment::new(Format::Rgba32Float).with_clear(ClearColor::Float([0.0, 0.0, 0.0, 0.0])));
-    colors.push(ColorAttachment::new(Format::Rgba32Float).with_clear(ClearColor::Float([0.0, 0.0, 0.0, 0.0])));
-    colors.push(ColorAttachment::new(Format::Rgba32Float).with_clear(ClearColor::Float([0.0, 0.0, 0.0, 0.0])));
-    colors.push(ColorAttachment::new(surface_format).with_clear(ClearColor::Float([0.0, 0.0, 0.0, 1.0])));
-    depths.push(DepthStencilAttachment::new(Format::D32Float).with_clear(ClearDepthStencil(1.0, 0)));
+    let ambient_roughness = graph.add_attachment(ColorAttachment::new(Format::Rgba32Float).with_clear(ClearColor::Float([0.0, 0.0, 0.0, 0.0])));
+    let emission_metallic = graph.add_attachment(ColorAttachment::new(Format::Rgba32Float).with_clear(ClearColor::Float([0.0, 0.0, 0.0, 0.0])));
+    let normal_normal_ambient_occlusion = graph.add_attachment(ColorAttachment::new(Format::Rgba32Float).with_clear(ClearColor::Float([0.0, 0.0, 0.0, 0.0])));
+    let position_depth = graph.add_attachment(ColorAttachment::new(Format::Rgba32Float).with_clear(ClearColor::Float([0.0, 0.0, 0.0, 0.0])));
+    let present = graph.add_attachment(ColorAttachment::new(surface_format).with_clear(ClearColor::Float([0.0, 0.0, 0.0, 1.0])));
+    let depth = graph.add_attachment(DepthStencilAttachment::new(Format::D32Float).with_clear(ClearDepthStencil(1.0, 0)));
 
     let prepare = DrawPbmPrepare.build()
-        .with_color(&colors[0])
-        .with_color(&colors[1])
-        .with_color(&colors[2])
-        .with_color(&colors[3])
-        .with_depth_stencil(&depths[0]);
+        .with_color(ambient_roughness)
+        .with_color(emission_metallic)
+        .with_color(normal_normal_ambient_occlusion)
+        .with_color(position_depth)
+        .with_depth_stencil(depth);
 
     let shade = DrawPbmShade.build()
-        .with_sampled(&colors[0])
-        .with_sampled(&colors[1])
-        .with_sampled(&colors[2])
-        .with_sampled(&colors[3])
-        .with_color(&colors[4]);
+        .with_sampled(ambient_roughness)
+        .with_sampled(emission_metallic)
+        .with_sampled(normal_normal_ambient_occlusion)
+        .with_sampled(position_depth)
+        .with_color(present);
 
-    GraphBuilder::new()
-        .with_pass(prepare)
-        .with_pass(shade)
-        .with_present(&colors[4])
+    graph
+        .add_pass(prepare)
+        .add_pass(shade)
+        .set_present(present);
 }
 
 fn fill<B>(scene: &mut Scene<B, ObjectData>, device: &B::Device)
