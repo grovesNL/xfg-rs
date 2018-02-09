@@ -23,7 +23,7 @@ use gfx_hal::pso::{DescriptorSetLayoutBinding, DescriptorSetWrite, DescriptorTyp
 use gfx_hal::queue::Transfer;
 use gfx_mem::{Block, Factory, SmartAllocator};
 use smallvec::SmallVec;
-use xfg::{DescriptorPool, Pass, ColorAttachment, DepthStencilAttachment, GraphBuilder};
+use xfg::{DescriptorPool, Pass, PassDesc, PassShaders, ColorAttachment, DepthStencilAttachment, GraphBuilder};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -38,10 +38,7 @@ unsafe impl Pod for TrProjView {}
 #[derive(Debug)]
 struct DrawFlat;
 
-impl<B> Pass<B, Scene<B>> for DrawFlat
-where
-    B: Backend,
-{
+impl PassDesc for DrawFlat {
     /// Name of the pass
     fn name(&self) -> &str {
         "DrawFlat"
@@ -91,7 +88,12 @@ where
             }
         ]
     }
+}
 
+impl<B> PassShaders<B> for DrawFlat
+where
+    B: Backend,
+{
     fn shaders<'a>(
         &self,
         shaders: &'a mut SmallVec<[B::ShaderModule; 5]>,
@@ -117,7 +119,12 @@ where
             }),
         })
     }
+}
 
+impl<B> Pass<B, Scene<B>> for DrawFlat
+where
+    B: Backend,
+{
     fn prepare<'a>(
         &mut self,
         pool: &mut DescriptorPool<B>,
@@ -373,7 +380,7 @@ where
     }
 }
 
-fn graph<'a, B>(surface_format: Format, graph: &mut GraphBuilder<B, Scene<B>>)
+fn graph<B>(surface_format: Format, graph: &mut GraphBuilder<DrawFlat>)
 where
     B: Backend,
 {

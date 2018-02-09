@@ -24,7 +24,7 @@ use gfx_hal::pso::{BlendState, ColorBlendDesc, ColorMask, DescriptorSetLayoutBin
 use gfx_hal::queue::Transfer;
 use gfx_mem::{Block, Factory, SmartAllocator};
 use smallvec::SmallVec;
-use xfg::{DescriptorPool, Pass, ColorAttachment, DepthStencilAttachment, GraphBuilder};
+use xfg::{DescriptorPool, Pass, ColorAttachment, DepthStencilAttachment, GraphBuilder, PassDesc, PassShaders};
 
 
 
@@ -49,10 +49,7 @@ unsafe impl Pod for PosNormal {}
 
 #[derive(Debug)]
 struct DrawPbmPrepare;
-impl<B> Pass<B, Scene<B, ObjectData>> for DrawPbmPrepare
-where
-    B: Backend,
-{
+impl PassDesc for DrawPbmPrepare {
     /// Name of the pass
     fn name(&self) -> &str {
         "DrawPbmPrepare"
@@ -109,7 +106,12 @@ where
             },
         ]
     }
+}
 
+impl<B> PassShaders<B> for DrawPbmPrepare
+where
+    B: Backend,
+{
     fn shaders<'a>(
         &self,
         shaders: &'a mut SmallVec<[B::ShaderModule; 5]>,
@@ -135,7 +137,13 @@ where
             }),
         })
     }
+}
 
+
+impl<B> Pass<B, Scene<B, ObjectData>> for DrawPbmPrepare
+where
+    B: Backend,
+{
     fn prepare<'a>(
         &mut self,
         pool: &mut DescriptorPool<B>,
@@ -265,10 +273,7 @@ where
 
 #[derive(Debug)]
 struct DrawPbmShade;
-impl<B> Pass<B, Scene<B, ObjectData>> for DrawPbmShade
-where
-    B: Backend,
-{
+impl PassDesc for DrawPbmShade {
     /// Name of the pass
     fn name(&self) -> &str {
         "DrawPbmShade"
@@ -282,11 +287,6 @@ where
 
     /// Color attachments
     fn colors(&self) -> usize { 1 }
-    
-    /// Blending for color attachment
-    fn color_blend(&self, _index: usize) -> ColorBlendDesc {
-        ColorBlendDesc(ColorMask::ALL, BlendState::ADD)
-    }
 
     /// Uses depth attachment
     fn depth(&self) -> bool { false }
@@ -333,7 +333,12 @@ where
             },
         ]
     }
+}
 
+impl<B> PassShaders<B> for DrawPbmShade
+where
+    B: Backend,
+{
     fn shaders<'a>(
         &self,
         shaders: &'a mut SmallVec<[B::ShaderModule; 5]>,
@@ -359,7 +364,12 @@ where
             }),
         })
     }
+}
 
+impl<B> Pass<B, Scene<B, ObjectData>> for DrawPbmShade
+where
+    B: Backend,
+{
     fn prepare<'a>(
         &mut self,
         pool: &mut DescriptorPool<B>,
@@ -544,7 +554,10 @@ where
     }
 }
 
-fn graph<'a, B>(surface_format: Format, graph: &mut GraphBuilder<B, Scene<B, ObjectData>>)
+
+type AnyPass = Box<Pass<back::Backend, Scene<back::Backend, ObjectData>>>;
+
+fn graph<'a, B>(surface_format: Format, graph: &mut GraphBuilder<AnyPass>)
 where
     B: Backend,
 {
@@ -555,19 +568,19 @@ where
     let present = graph.add_attachment(ColorAttachment::new(surface_format).with_clear(ClearColor::Float([0.0, 0.0, 0.0, 1.0])));
     let depth = graph.add_attachment(DepthStencilAttachment::new(Format::D32Float).with_clear(ClearDepthStencil(1.0, 0)));
 
-    let prepare = DrawPbmPrepare.build()
+    let prepare = AnyPass::from(Box::new(DrawPbmPrepare)).build()
         .with_color(ambient_roughness)
         .with_color(emission_metallic)
         .with_color(normal_normal_ambient_occlusion)
         .with_color(position_depth)
         .with_depth_stencil(depth);
 
-    let shade = DrawPbmShade.build()
+    let shade = AnyPass::from(Box::new(DrawPbmShade)).build()
         .with_sampled(ambient_roughness)
         .with_sampled(emission_metallic)
         .with_sampled(normal_normal_ambient_occlusion)
         .with_sampled(position_depth)
-        .with_color(present);
+        .with_color_blend(present, ColorBlendDesc(ColorMask::ALL, BlendState::ADD));
 
     graph
         .add_pass(prepare)
@@ -713,6 +726,15 @@ where
 }
 
 #[test]
-fn shade_pass<'a>(inputs: [&'a ColorAttachment; 4], present: &'a ColorAttachment) -> PassBuilder<'a> {
-    
+fn shade_pass<B>(inputs: &[AttachmentRef; 4], output: AttachmentRef) -> PassBuilder {
+    PassConstructor
+        // setup sampled attachments at bindings and set
+        .with_many_sampled(0..4, 0, inputs.iter().cloned())
+        // setup color attachment
+        .with_color(output)
+        // create module from bytes and setup entry point
+        .with_vertex_shader(include_bytes!("second.vert.spv"), "main", &[])
+        .with_fragment_shader(include_bytes!("second.frag.spv"), "main", &[])
+        // setup aux type
+        .with_aux::<Scene<B, ObjectData>>()
 }

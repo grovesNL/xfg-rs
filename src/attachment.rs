@@ -94,6 +94,11 @@ impl DepthStencilAttachment {
 /// Reference to either color or depth-stencil attachment declaration in `GraphBuilder`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AttachmentRef(pub(crate) usize);
+impl AttachmentRef {
+    pub(crate) fn index(&self) -> usize {
+        self.0
+    }
+}
 
 
 #[derive(Debug)]

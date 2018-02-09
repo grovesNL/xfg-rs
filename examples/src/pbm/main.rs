@@ -23,7 +23,7 @@ use gfx_hal::pso::{DescriptorSetLayoutBinding, DescriptorSetWrite, DescriptorTyp
 use gfx_hal::queue::Transfer;
 use gfx_mem::{Block, Factory, SmartAllocator};
 use smallvec::SmallVec;
-use xfg::{DescriptorPool, Pass, ColorAttachment, DepthStencilAttachment, GraphBuilder};
+use xfg::{DescriptorPool, Pass, ColorAttachment, DepthStencilAttachment, GraphBuilder, PassDesc, PassShaders};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -87,10 +87,7 @@ fn pad(value: [f32; 3], pad: f32) -> [f32; 4] {
 #[derive(Debug)]
 struct DrawPbm;
 
-impl<B> Pass<B, Scene<B, ObjectData>> for DrawPbm
-where
-    B: Backend,
-{
+impl PassDesc for DrawPbm {
     /// Name of the pass
     fn name(&self) -> &str {
         "DrawPbm"
@@ -147,7 +144,13 @@ where
             },
         ]
     }
+}
 
+
+impl<B> PassShaders<B> for DrawPbm
+where
+    B: Backend,
+{
     fn shaders<'a>(
         &self,
         shaders: &'a mut SmallVec<[B::ShaderModule; 5]>,
@@ -173,7 +176,13 @@ where
             }),
         })
     }
+}
 
+
+impl<B> Pass<B, Scene<B, ObjectData>> for DrawPbm
+where
+    B: Backend,
+{
     fn prepare<'a>(
         &mut self,
         pool: &mut DescriptorPool<B>,
@@ -293,7 +302,7 @@ where
     }
 }
 
-fn graph<'a, B>(surface_format: Format, graph: &'a mut GraphBuilder<B, Scene<B, ObjectData>>)
+fn graph<'a, B>(surface_format: Format, graph: &'a mut GraphBuilder<DrawPbm>)
 where
     B: Backend,
 {

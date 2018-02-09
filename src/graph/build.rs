@@ -13,7 +13,7 @@ use gfx_hal::window::Backbuffer;
 
 use attachment::{Attachment, AttachmentRef, AttachmentDesc};
 use graph::Graph;
-use pass::{PassBuilder, PassNode};
+use pass::{PassBuilder, PassShaders, PassNode};
 
 
 
@@ -102,19 +102,15 @@ where
 ///
 /// - `B`: render `Backend`
 /// - `T`: auxiliary data used by the `Pass`es in the `Graph`
-#[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
-pub struct GraphBuilder<B: Backend, T> {
+#[derive(Debug)]
+pub struct GraphBuilder<P> {
     attachments: Vec<Attachment>,
-    passes: Vec<PassBuilder<B, T>>,
+    passes: Vec<PassBuilder<P>>,
     present: Option<AttachmentRef>,
     extent: Extent,
 }
 
-impl<B, T> GraphBuilder<B, T>
-where
-    B: Backend,
-{
+impl<P> GraphBuilder<P> {
     /// Create a new `GraphBuilder`
     pub fn new() -> Self {
         GraphBuilder {
@@ -164,7 +160,7 @@ where
     /// ### Parameters:
     ///
     /// - `pass`: pass builder
-    pub fn with_pass(mut self, pass: PassBuilder<B, T>) -> Self {
+    pub fn with_pass(mut self, pass: PassBuilder<P>) -> Self {
         self.add_pass(pass);
         self
     }
@@ -174,7 +170,7 @@ where
     /// ### Parameters:
     ///
     /// - `pass`: pass builder
-    pub fn add_pass(&mut self, pass: PassBuilder<B, T>) -> &mut Self {
+    pub fn add_pass(&mut self, pass: PassBuilder<P>) -> &mut Self {
         self.passes.push(pass);
         self
     }
@@ -231,15 +227,17 @@ where
     /// - `A`: allocator function
     /// - `I`: render target image type
     /// - `E`: errors returned by the allocator function
-    pub fn build<A, I, E>(
+    pub fn build<B, A, I, E>(
         self,
         device: &B::Device,
         backbuffer: &Backbuffer<B>,
         mut allocator: A,
-    ) -> Result<Graph<B, I, T>, GraphBuildError<E>>
+    ) -> Result<Graph<B, I, P>, GraphBuildError<E>>
     where
+        B: Backend,
         A: FnMut(Kind, Level, Format, Usage, Properties, &B::Device) -> Result<I, E>,
         I: Borrow<B::Image>,
+        P: PassShaders<B>,
     {
         info!("Building graph from {:?}", self);
         let present = self.present
@@ -292,28 +290,8 @@ where
 
         let mut images = vec![];
 
-        // info!("Initialize attachments");
-        // let mut color_targets = HashMap::<*const _, (Range<usize>, usize)>::new();
-        // color_targets.insert(present, (0..image_views.len(), 0));
-        // for attachment in color_attachments {
-        //     if !eq(attachment, present) {
-        //         let targets = create_target::<B, _, I, E>(
-        //                 attachment.format,
-        //                 &mut allocator,
-        //                 device,
-        //                 &mut images,
-        //                 &mut image_views,
-        //                 self.extent,
-        //                 frames,
-        //                 false,
-        //             ).map_err(GraphBuildError::AllocationError)?;
-        //         info!("Create attachment: {:#?}:{:#?}", attachment, targets);
-        //         color_targets.insert(attachment, (targets, 0));
-        //     }
-        // }
-
         info!("Build pass nodes from pass builders");
-        let mut pass_nodes: Vec<PassNode<B, T>> = Vec::new();
+        let mut pass_nodes: Vec<PassNode<B, P>> = Vec::new();
 
         for (pass_index, pass) in passes.iter().enumerate() {
             info!("Check sampled inputs");
@@ -345,7 +323,7 @@ where
 
             info!("Create color targets");
             for &color in &pass.colors {
-                let ref mut color = attachments[color.0];
+                let ref mut color = attachments[color.0.index()];
                 color.write.get_or_insert_with(|| pass_index .. pass_index).end = pass_index;
                 if color.views.is_none() {
                     debug_assert!(color.images.is_none());
@@ -365,7 +343,7 @@ where
 
             info!("Create depth-stencil target");
             if let Some(depth_stencil) = pass.depth_stencil {
-                let ref mut depth_stencil = attachments[depth_stencil.0];
+                let ref mut depth_stencil = attachments[depth_stencil.0.index()];
                 depth_stencil.write.get_or_insert_with(|| pass_index .. pass_index).end = pass_index;
                 if depth_stencil.views.is_none() {
                     debug_assert!(depth_stencil.images.is_none());
@@ -446,12 +424,9 @@ where
     }
 }
 
-fn reorder_passes<B, T>(
-    mut unscheduled: Vec<PassBuilder<B, T>>,
-) -> (Vec<PassBuilder<B, T>>, Vec<Option<usize>>)
-where
-    B: Backend,
-{
+fn reorder_passes<P>(
+    mut unscheduled: Vec<PassBuilder<P>>,
+) -> (Vec<PassBuilder<P>>, Vec<Option<usize>>) {
     // Ordered passes
     let mut scheduled = vec![];
     let mut deps = vec![];
@@ -481,6 +456,82 @@ where
     }
     (scheduled, deps)
 }
+
+/// Get dependencies of pass.
+fn direct_dependencies<P>(
+    passes: &[PassBuilder<P>],
+    pass: &PassBuilder<P>,
+) -> Vec<usize> {
+    let mut deps = Vec::new();
+    for &input in pass.inputs.iter().chain(&pass.sampled) {
+        deps.extend(
+            passes
+                .iter()
+                .enumerate()
+                .filter(|p| {
+                    p.1.depth_stencil.map(|(a, _)| a) == Some(input)
+                        || p.1
+                            .colors
+                            .iter()
+                            .any(|&(a, _)| input == a)
+                })
+                .map(|p| p.0),
+        );
+    }
+    deps.sort();
+    deps.dedup();
+    deps
+}
+
+/// Get other passes that shares output attachments
+fn siblings<P>(
+    passes: &[PassBuilder<P>],
+    pass: &PassBuilder<P>,
+) -> Vec<usize> {
+    let mut siblings = Vec::new();
+    for &color in pass.colors.iter() {
+        siblings.extend(
+            passes
+                .iter()
+                .enumerate()
+                .filter(|p| p.1.colors.iter().any(|&a| a == color))
+                .map(|p| p.0),
+        );
+    }
+    if let Some(depth_stencil) = pass.depth_stencil {
+        siblings.extend(
+            passes
+                .iter()
+                .enumerate()
+                .filter(|p| {
+                    p.1
+                        .depth_stencil
+                        .as_ref()
+                        .map_or(false, |&a| a == depth_stencil)
+                })
+                .map(|p| p.0),
+        );
+    }
+    siblings.sort();
+    siblings.dedup();
+    siblings
+}
+
+/// Get dependencies of pass. And dependencies of dependencies.
+fn dependencies<P>(
+    passes: &[PassBuilder<P>],
+    pass: &PassBuilder<P>,
+) -> Vec<usize> {
+    let mut deps = direct_dependencies(passes, pass);
+    deps = deps.into_iter()
+        .flat_map(|dep| dependencies(passes, &passes[dep]))
+        .collect();
+    deps.sort();
+    deps.dedup();
+    deps
+}
+
+
 
 fn create_target<B, A, I, E>(
     format: Format,
@@ -522,87 +573,4 @@ where
         images.push(image);
     }
     Ok(())
-}
-
-/// Get dependencies of pass.
-fn direct_dependencies<B, T>(
-    passes: &[PassBuilder<B, T>],
-    pass: &PassBuilder<B, T>,
-) -> Vec<usize>
-where
-    B: Backend,
-{
-    let mut deps = Vec::new();
-    for &input in pass.inputs.iter().chain(&pass.sampled) {
-        deps.extend(
-            passes
-                .iter()
-                .enumerate()
-                .filter(|p| {
-                    p.1.depth_stencil == Some(input)
-                        || p.1
-                            .colors
-                            .iter()
-                            .any(|&a| input == a)
-                })
-                .map(|p| p.0),
-        );
-    }
-    deps.sort();
-    deps.dedup();
-    deps
-}
-
-/// Get other passes that shares output attachments
-fn siblings<B, T>(
-    passes: &[PassBuilder<B, T>],
-    pass: &PassBuilder<B, T>,
-) -> Vec<usize>
-where
-    B: Backend,
-{
-    let mut siblings = Vec::new();
-    for &color in pass.colors.iter() {
-        siblings.extend(
-            passes
-                .iter()
-                .enumerate()
-                .filter(|p| p.1.colors.iter().any(|&a| a == color))
-                .map(|p| p.0),
-        );
-    }
-    if let Some(depth_stencil) = pass.depth_stencil {
-        siblings.extend(
-            passes
-                .iter()
-                .enumerate()
-                .filter(|p| {
-                    p.1
-                        .depth_stencil
-                        .as_ref()
-                        .map_or(false, |&a| a == depth_stencil)
-                })
-                .map(|p| p.0),
-        );
-    }
-    siblings.sort();
-    siblings.dedup();
-    siblings
-}
-
-/// Get dependencies of pass. And dependencies of dependencies.
-fn dependencies<B, T>(
-    passes: &[PassBuilder<B, T>],
-    pass: &PassBuilder<B, T>,
-) -> Vec<usize>
-where
-    B: Backend,
-{
-    let mut deps = direct_dependencies(passes, pass);
-    deps = deps.into_iter()
-        .flat_map(|dep| dependencies(passes, &passes[dep]))
-        .collect();
-    deps.sort();
-    deps.dedup();
-    deps
 }
