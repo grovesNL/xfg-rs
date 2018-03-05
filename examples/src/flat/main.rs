@@ -18,9 +18,9 @@ use gfx_hal::command::{ClearColor, ClearDepthStencil, CommandBuffer, Primary,
 use gfx_hal::device::ShaderError;
 use gfx_hal::format::Format;
 use gfx_hal::memory::{cast_slice, Pod};
-use gfx_hal::pso::{DescriptorSetLayoutBinding, DescriptorSetWrite, DescriptorType,
-                   DescriptorWrite, ElemStride, Element, EntryPoint, GraphicsShaderSet,
-                   ShaderStageFlags, VertexBufferSet};
+use gfx_hal::pso::{Descriptor, DescriptorSetLayoutBinding, DescriptorSetWrite, DescriptorType,
+                   ElemStride, Element, EntryPoint, GraphicsShaderSet, ShaderStageFlags,
+                   VertexBufferSet};
 use gfx_hal::queue::Transfer;
 use mem::{Block, Factory, SmartAllocator};
 use smallvec::SmallVec;
@@ -168,12 +168,12 @@ where
                     )
                     .unwrap();
                 let set = pool.allocate(device);
-                device.write_descriptor_sets(&[
+                device.write_descriptor_sets(vec![
                     DescriptorSetWrite {
                         set: &set,
                         binding: 0,
                         array_offset: 0,
-                        write: DescriptorWrite::UniformBuffer(&[(buffer.borrow(), 0..size)]),
+                        descriptors: Some(Descriptor::Buffer(buffer.borrow(), None .. None)),
                     },
                 ]);
                 Cache {
@@ -367,23 +367,47 @@ where
 
     let indices: Vec<u16> = vec![
         // Left
-        0, 1, 2,
-        1, 2, 3,
+        0,
+        1,
+        2,
+        1,
+        2,
+        3,
         // Right
-        4, 5, 6,
-        5, 6, 7,
+        4,
+        5,
+        6,
+        5,
+        6,
+        7,
         // Top
-        8, 9, 10,
-        9, 10, 11,
+        8,
+        9,
+        10,
+        9,
+        10,
+        11,
         // Bottom
-        12, 13, 14,
-        13, 14, 15,
+        12,
+        13,
+        14,
+        13,
+        14,
+        15,
         // Front
-        16, 17, 18,
-        17, 18, 19,
+        16,
+        17,
+        18,
+        17,
+        18,
+        19,
         // Back
-        20, 21, 22,
-        21, 22, 23,
+        20,
+        21,
+        22,
+        21,
+        22,
+        23,
     ];
 
     let index_count = indices.len() as u32;

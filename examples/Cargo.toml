@@ -9,13 +9,13 @@ publish = false
 cgmath = "0.16"
 env_logger = "0.5"
 genmesh = "0.5.0"
-gfx-backend-dx12 = { git = "https://github.com/gfx-rs/gfx", optional = true, rev = "070e0cee4" }
-gfx-backend-gl = { git = "https://github.com/gfx-rs/gfx", optional = true, rev = "070e0cee4" }
-gfx-backend-empty = { git = "https://github.com/gfx-rs/gfx", rev = "070e0cee4" }
-gfx-backend-metal = { git = "https://github.com/gfx-rs/gfx", optional = true, rev = "070e0cee4" }
-gfx-backend-vulkan = { git = "https://github.com/gfx-rs/gfx", optional = true, rev = "070e0cee4" }
-gfx-hal = { version = "0.1.0", git = "https://github.com/gfx-rs/gfx", rev = "070e0cee4" }
-gfx-memory = { version = "0.1.0", git = "https://github.com/gfx-rs/gfx-memory", rev = "ec605bd3d" }
+gfx-backend-dx12 = { path = "../../gfx/src/backend/dx12", optional = true }
+gfx-backend-gl = { path = "../../gfx/src/backend/gl", optional = true }
+gfx-backend-empty = { path = "../../gfx/src/backend/empty" }
+gfx-backend-metal = { path = "../../gfx/src/backend/metal", optional = true }
+gfx-backend-vulkan = { path = "../../gfx/src/backend/vulkan", optional = true }
+gfx-hal = { path = "../../gfx/src/hal" }
+gfx-memory = { path = "../../gfx-memory" }
 log = "0.4"
 smallvec = "0.4"
 winit = "0.10"
